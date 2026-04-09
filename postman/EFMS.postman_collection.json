@@ -1,0 +1,184 @@
+{
+  "info": {
+    "name": "EFMS - Event Financial Management System",
+    "description": "Test collection for the Create Event Budget use case + Variance Alerts.\n\nRun the requests in order. The 'Create event + draft budget' request auto-saves the returned budgetId to a collection variable, so later requests pick it up automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "budgetId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. List organizers (sanity check)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": { "raw": "{{baseUrl}}/api/organizers", "host": ["{{baseUrl}}"], "path": ["api", "organizers"] }
+      }
+    },
+    {
+      "name": "2. Happy path - Create event + draft budget (8000)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('budgetId', json.id);",
+              "pm.test('Status DRAFT', function () { pm.expect(json.status).to.eql('DRAFT'); });",
+              "console.log('Saved budgetId =', json.id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"TechFest 2026\",\n  \"description\": \"Annual technical festival\",\n  \"startDate\": \"2026-05-01\",\n  \"endDate\": \"2026-05-03\",\n  \"organizerId\": 1,\n  \"totalBudget\": 8000\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/budgets", "host": ["{{baseUrl}}"], "path": ["api", "budgets"] }
+      }
+    },
+    {
+      "name": "3. Happy path - Add category: Food (3000)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Food\",\n  \"allocatedAmount\": 3000\n}" },
+        "url": {
+          "raw": "{{baseUrl}}/api/budgets/{{budgetId}}/categories",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "budgets", "{{budgetId}}", "categories"]
+        }
+      }
+    },
+    {
+      "name": "4. Happy path - Add category: Transport (2000)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Transport\",\n  \"allocatedAmount\": 2000\n}" },
+        "url": {
+          "raw": "{{baseUrl}}/api/budgets/{{budgetId}}/categories",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "budgets", "{{budgetId}}", "categories"]
+        }
+      }
+    },
+    {
+      "name": "5. Happy path - Add category: Prizes (2500)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Prizes\",\n  \"allocatedAmount\": 2500\n}" },
+        "url": {
+          "raw": "{{baseUrl}}/api/budgets/{{budgetId}}/categories",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "budgets", "{{budgetId}}", "categories"]
+        }
+      }
+    },
+    {
+      "name": "6. Happy path - Validate (expect WARNING, DRAFT -> READY)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/budgets/{{budgetId}}/validate",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "budgets", "{{budgetId}}", "validate"]
+        }
+      }
+    },
+    {
+      "name": "7. Happy path - Submit (expect AUTO_APPROVED, 8000 <= 10000)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/budgets/{{budgetId}}/submit",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "budgets", "{{budgetId}}", "submit"]
+        }
+      }
+    },
+    {
+      "name": "8. Happy path - Get final budget state",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/budgets/{{budgetId}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "budgets", "{{budgetId}}"]
+        }
+      }
+    },
+    {
+      "name": "9. Variance - Create small budget (5000) for overflow test",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "var json = pm.response.json();",
+              "pm.collectionVariables.set('budgetId', json.id);",
+              "console.log('Overwrote budgetId with variance-test budget =', json.id);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"CultFest 2026\",\n  \"description\": \"Variance alert test\",\n  \"startDate\": \"2026-06-10\",\n  \"endDate\": \"2026-06-12\",\n  \"organizerId\": 1,\n  \"totalBudget\": 5000\n}"
+        },
+        "url": { "raw": "{{baseUrl}}/api/budgets", "host": ["{{baseUrl}}"], "path": ["api", "budgets"] }
+      }
+    },
+    {
+      "name": "10. Variance - Add category exceeding limit (6000)",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{\n  \"name\": \"Stage Setup\",\n  \"allocatedAmount\": 6000\n}" },
+        "url": {
+          "raw": "{{baseUrl}}/api/budgets/{{budgetId}}/categories",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "budgets", "{{budgetId}}", "categories"]
+        }
+      }
+    },
+    {
+      "name": "11. Variance - Validate (expect ERROR: ALLOCATION_EXCEEDS_LIMIT)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/budgets/{{budgetId}}/validate",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "budgets", "{{budgetId}}", "validate"]
+        }
+      }
+    },
+    {
+      "name": "12. Variance - Submit (expect HTTP 400, blocked)",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/api/budgets/{{budgetId}}/submit",
+          "host": ["{{baseUrl}}"],
+          "path": ["api", "budgets", "{{budgetId}}", "submit"]
+        }
+      }
+    }
+  ]
+}

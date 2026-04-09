@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EFMS — Event Financial Management System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header>
+        <h1>Event Financial Management System</h1>
+        <p class="subtitle">Create Event Budget · Event Organizer Portal</p>
+    </header>
+
+    <main>
+        <!-- STEP 1: Create event + draft budget -->
+        <section id="step-create" class="card">
+            <h2><span class="step-num">1</span> Create Event &amp; Draft Budget</h2>
+            <form id="create-event-form">
+                <div class="form-row">
+                    <label>
+                        Event Name
+                        <input type="text" name="name" placeholder="e.g. TechFest 2026" required>
+                    </label>
+                    <label>
+                        Description
+                        <input type="text" name="description" placeholder="Optional">
+                    </label>
+                </div>
+                <div class="form-row">
+                    <label>
+                        Start Date
+                        <input type="date" name="startDate" required>
+                    </label>
+                    <label>
+                        End Date
+                        <input type="date" name="endDate" required>
+                    </label>
+                </div>
+                <div class="form-row">
+                    <label>
+                        Organizer
+                        <select name="organizerId" id="organizer-select" required></select>
+                    </label>
+                    <label>
+                        Total Budget (&#8377;)
+                        <input type="number" name="totalBudget" step="0.01" min="0.01" placeholder="e.g. 8000" required>
+                    </label>
+                </div>
+                <button type="submit" class="primary">Create Draft Budget</button>
+            </form>
+        </section>
+
+        <!-- STEP 2+: Budget workspace -->
+        <section id="workspace" class="card hidden">
+            <div class="budget-header">
+                <div>
+                    <h2 id="workspace-title"></h2>
+                    <p id="workspace-meta" class="muted"></p>
+                </div>
+                <span id="status-badge" class="badge">DRAFT</span>
+            </div>
+
+            <div class="budget-summary">
+                <div class="stat">
+                    <label>Total Limit</label>
+                    <strong id="stat-limit">—</strong>
+                </div>
+                <div class="stat">
+                    <label>Allocated</label>
+                    <strong id="stat-allocated">—</strong>
+                </div>
+                <div class="stat">
+                    <label>Remaining</label>
+                    <strong id="stat-remaining">—</strong>
+                </div>
+            </div>
+
+            <!-- STEP 2: Categories -->
+            <div class="subsection">
+                <h3><span class="step-num">2</span> Expense Categories</h3>
+                <table id="categories-table">
+                    <thead>
+                        <tr>
+                            <th>Category</th>
+                            <th class="right">Allocated</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+                <form id="add-category-form" class="inline-form">
+                    <input type="text" name="name" placeholder="Category name (e.g. Food)" required>
+                    <input type="number" name="allocatedAmount" step="0.01" min="0.01" placeholder="Amount" required>
+                    <button type="submit">Add Category</button>
+                </form>
+            </div>
+
+            <!-- STEP 3 + 4: Actions -->
+            <div class="subsection">
+                <h3><span class="step-num">3</span> Validate &amp; Submit</h3>
+                <div class="actions">
+                    <button id="btn-validate">Validate Budget</button>
+                    <button id="btn-submit" class="primary">Submit for Approval</button>
+                </div>
+                <div id="alerts-area"></div>
+                <div id="decision-area"></div>
+            </div>
+
+            <button id="btn-reset" class="link">&larr; Start over with a new event</button>
+        </section>
+
+        <footer class="footer">
+            <p>Spring Boot MVC · Strategy Pattern · H2 In-Memory DB · OOAD Mini Project</p>
+        </footer>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
