@@ -40,14 +40,16 @@ The system enforces structured financial planning, role-based access, budget dis
 
 The project is divided across team members. This branch currently implements:
 
-### Implemented in this branch (`feature/create-event-budget`)
-- **Major use case:** Create Event Budget (Event Organizer)
-- **Minor use case:** Budget Variance Alerts (automatic validation)
+### Implemented in this branch
+- **Major UC #1:** Create Event Budget (Event Organizer)
+- **Minor UC #1:** Budget Variance Alerts (automatic validation)
+- **Major UC #2:** Submit Expense Claim (Event Organizer)
+- **Minor UC #2:** Role-Based Approval Flow (routing strategy at submission)
 
-### Planned by other team members
-- Expense submission and tracking
-- Expense approval workflow (Approving Authority)
-- Budget closure and reporting (Finance Admin)
+### Planned (future branches)
+- Expense approval / rejection workflow (Approving Authority) — UC #3
+- Expense Category Rules (Finance Admin) — minor UC #3
+- Budget closure and reporting (Finance Admin) — UC #4
 - Authentication and role-based access control
 - Notification system
 
@@ -79,6 +81,33 @@ Automatically triggered during validation and submission. The system checks:
 | `CATEGORY_OVERSPENT` | ERROR | Spent amount exceeds allocated amount in a category |
 
 **ERROR-severity alerts are blocking** — they prevent budget submission. **WARNING alerts are advisory** and don't block the flow.
+
+### Major Use Case — Submit Expense Claim
+
+Once a budget has been **APPROVED**, the Event Organizer can submit expense claims against any of its categories. The workflow:
+
+1. **Choose a category** from an APPROVED budget.
+2. **Fill in the claim** — description, amount, expense date, optional supporting-document URL.
+3. **System validates** — budget must be APPROVED, category must have headroom (committed = pending + approved expenses), amount must be positive.
+4. **Routing strategy stamps the approval chain** (minor UC) and the expense is persisted as `PENDING_APPROVAL`.
+
+**Expense lifecycle states:** `PENDING_APPROVAL → (APPROVED | REJECTED)` *(approve/reject action itself belongs to UC #3).*
+
+### Minor Use Case — Role-Based Approval Flow
+
+At submission time, an `ApprovalRoutingStrategy` decides which approval chain the expense must traverse:
+
+| Level | Meaning |
+|---|---|
+| `LEVEL_1` | Single-step approval (e.g. Faculty Coordinator) |
+| `LEVEL_1_AND_2` | Two-step approval (e.g. Faculty Coordinator + Finance Committee) |
+
+Two concrete strategies ship today:
+
+- **`AmountBasedRoutingStrategy`** (default, `@Primary`) — ≤ ₹2,000 → `LEVEL_1`, otherwise `LEVEL_1_AND_2`.
+- **`CategoryBasedRoutingStrategy`** — sensitive categories (`Prizes`, `Honorarium`, `Sponsorship`) always require `LEVEL_1_AND_2`; everything else `LEVEL_1`.
+
+Swapping the active policy is a one-line change (`@Primary`) — no service-layer edit (Open/Closed).
 
 ---
 
@@ -237,6 +266,47 @@ Response:
   "remaining": 8000.00,
   "status": "DRAFT",
   "categories": []
+}
+```
+
+### Expenses (Submit Expense Claim use case)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `POST` | `/api/expenses` | Submit an expense claim against a category of an APPROVED budget |
+| `GET` | `/api/expenses?budgetId={id}` | List all expenses for a budget |
+| `GET` | `/api/expenses/{id}` | Get a single expense |
+| `GET` | `/api/expenses/routing-policy` | Show which ApprovalRoutingStrategy is currently active |
+
+#### Example: Submit an Expense
+
+```http
+POST /api/expenses
+Content-Type: application/json
+
+{
+  "categoryId": 1,
+  "submittedById": 1,
+  "description": "Catering for day 1",
+  "amount": 1500,
+  "expenseDate": "2026-05-01",
+  "supportingDocUrl": "https://example.com/receipt.pdf"
+}
+```
+
+Response:
+```json
+{
+  "id": 1,
+  "categoryId": 1,
+  "categoryName": "Food",
+  "budgetId": 1,
+  "description": "Catering for day 1",
+  "amount": 1500.00,
+  "expenseDate": "2026-05-01",
+  "status": "PENDING_APPROVAL",
+  "requiredApprovalLevel": "LEVEL_1",
+  "submittedBy": "Demo Organizer"
 }
 ```
 
