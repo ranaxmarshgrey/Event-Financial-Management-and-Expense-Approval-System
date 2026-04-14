@@ -16,6 +16,7 @@ import com.ooad.efms.repository.EventRepository;
 import com.ooad.efms.repository.OrganizerRepository;
 import com.ooad.efms.strategy.ApprovalDecision;
 import com.ooad.efms.strategy.ApprovalStrategy;
+import jakarta.persistence.EntityManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -43,17 +44,20 @@ public class BudgetService {
     private final OrganizerRepository organizerRepository;
     private final VarianceAlertService varianceAlertService;
     private final ApprovalStrategy approvalStrategy;
+    private final EntityManager entityManager;
 
     public BudgetService(EventRepository eventRepository,
                          BudgetRepository budgetRepository,
                          OrganizerRepository organizerRepository,
                          VarianceAlertService varianceAlertService,
-                         ApprovalStrategy approvalStrategy) {
+                         ApprovalStrategy approvalStrategy,
+                         EntityManager entityManager) {
         this.eventRepository = eventRepository;
         this.budgetRepository = budgetRepository;
         this.organizerRepository = organizerRepository;
         this.varianceAlertService = varianceAlertService;
         this.approvalStrategy = approvalStrategy;
+        this.entityManager = entityManager;
     }
 
     /** Step 1: Organizer creates a new event and its empty draft budget. */
@@ -82,6 +86,8 @@ public class BudgetService {
         requireStatus(budget, BudgetStatus.DRAFT);
         ExpenseCategory category = new ExpenseCategory(req.getName(), req.getAllocatedAmount());
         budget.addCategory(category);
+        // Force the INSERT now so the generated id is populated on the DTO we return.
+        entityManager.flush();
         return BudgetResponse.from(budget);
     }
 
@@ -117,6 +123,36 @@ public class BudgetService {
 
     public BudgetResponse get(Long budgetId) {
         return BudgetResponse.from(loadBudget(budgetId));
+    }
+
+    public List<BudgetResponse> listAll() {
+        return budgetRepository.findAll().stream().map(BudgetResponse::from).toList();
+    }
+
+    /** UC #1 follow-up: list budgets awaiting manual approval (SUBMITTED state). */
+    public List<BudgetResponse> listPendingApproval() {
+        return budgetRepository.findByStatus(BudgetStatus.SUBMITTED)
+                .stream().map(BudgetResponse::from).toList();
+    }
+
+    /** Approving authority manually approves a SUBMITTED budget. */
+    public BudgetResponse manualApprove(Long budgetId) {
+        Budget budget = loadBudget(budgetId);
+        if (budget.getStatus() != BudgetStatus.SUBMITTED) {
+            throw new InvalidBudgetException("Only SUBMITTED budgets can be manually approved (was " + budget.getStatus() + ")");
+        }
+        budget.setStatus(BudgetStatus.APPROVED);
+        return BudgetResponse.from(budget);
+    }
+
+    /** Approving authority manually rejects a SUBMITTED budget. */
+    public BudgetResponse manualReject(Long budgetId) {
+        Budget budget = loadBudget(budgetId);
+        if (budget.getStatus() != BudgetStatus.SUBMITTED) {
+            throw new InvalidBudgetException("Only SUBMITTED budgets can be rejected (was " + budget.getStatus() + ")");
+        }
+        budget.setStatus(BudgetStatus.REJECTED);
+        return BudgetResponse.from(budget);
     }
 
     private Budget loadBudget(Long id) {

@@ -4,9 +4,11 @@ import com.ooad.efms.dto.ExpenseResponse;
 import com.ooad.efms.dto.SubmitExpenseRequest;
 import com.ooad.efms.exception.InvalidBudgetException;
 import com.ooad.efms.exception.ResourceNotFoundException;
+import com.ooad.efms.exception.RuleViolationException;
 import com.ooad.efms.model.ApprovalLevel;
 import com.ooad.efms.model.Budget;
 import com.ooad.efms.model.BudgetStatus;
+import com.ooad.efms.model.CategoryRule;
 import com.ooad.efms.model.Expense;
 import com.ooad.efms.model.ExpenseCategory;
 import com.ooad.efms.model.ExpenseStatus;
@@ -70,6 +72,23 @@ public class ExpenseService {
         Organizer organizer = organizerRepository.findById(req.getSubmittedById())
                 .orElseThrow(() -> new ResourceNotFoundException("Organizer not found: " + req.getSubmittedById()));
 
+        // Minor UC #3 — category rules enforced at submission time.
+        CategoryRule rule = category.getRule();
+        if (rule != null) {
+            if (rule.isBlocked()) {
+                throw new RuleViolationException(
+                        "CATEGORY_BLOCKED",
+                        "Category '" + category.getName() + "' is blocked for new expenses");
+            }
+            if (rule.getMaxExpenseAmount() != null
+                    && req.getAmount().compareTo(rule.getMaxExpenseAmount()) > 0) {
+                throw new RuleViolationException(
+                        "EXCEEDS_CATEGORY_MAX",
+                        "Expense amount " + req.getAmount()
+                                + " exceeds category cap of " + rule.getMaxExpenseAmount());
+            }
+        }
+
         BigDecimal committed = expenseRepository.sumCommittedByCategory(category.getId(), ExpenseStatus.REJECTED);
         BigDecimal projected = committed.add(req.getAmount());
         if (projected.compareTo(category.getAllocatedAmount()) > 0) {
@@ -87,6 +106,12 @@ public class ExpenseService {
                 organizer,
                 ApprovalLevel.LEVEL_1);
         ApprovalLevel level = routingStrategy.routeFor(expense);
+        // Category rule can upgrade the required chain (never downgrade).
+        if (rule != null
+                && rule.getRequiresL2ApprovalAbove() != null
+                && req.getAmount().compareTo(rule.getRequiresL2ApprovalAbove()) > 0) {
+            level = ApprovalLevel.LEVEL_1_AND_2;
+        }
         expense.setRequiredApprovalLevel(level);
 
         expense = expenseRepository.save(expense);
@@ -96,6 +121,13 @@ public class ExpenseService {
     @Transactional(readOnly = true)
     public List<ExpenseResponse> listByBudget(Long budgetId) {
         return expenseRepository.findByCategoryBudgetId(budgetId).stream()
+                .map(ExpenseResponse::from)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ExpenseResponse> listPending() {
+        return expenseRepository.findByStatusOrderBySubmittedAtAsc(ExpenseStatus.PENDING_APPROVAL).stream()
                 .map(ExpenseResponse::from)
                 .toList();
     }

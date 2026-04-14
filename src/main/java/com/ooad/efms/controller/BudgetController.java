@@ -47,4 +47,24 @@ public class BudgetController {
     public ResponseEntity<BudgetResponse> get(@PathVariable Long id) {
         return ResponseEntity.ok(budgetService.get(id));
     }
+
+    @GetMapping
+    public ResponseEntity<List<BudgetResponse>> listAll() {
+        return ResponseEntity.ok(budgetService.listAll());
+    }
+
+    @GetMapping("/pending-approval")
+    public ResponseEntity<List<BudgetResponse>> pendingApproval() {
+        return ResponseEntity.ok(budgetService.listPendingApproval());
+    }
+
+    @PostMapping("/{id}/manual-approve")
+    public ResponseEntity<BudgetResponse> manualApprove(@PathVariable Long id) {
+        return ResponseEntity.ok(budgetService.manualApprove(id));
+    }
+
+    @PostMapping("/{id}/manual-reject")
+    public ResponseEntity<BudgetResponse> manualReject(@PathVariable Long id) {
+        return ResponseEntity.ok(budgetService.manualReject(id));
+    }
 }
