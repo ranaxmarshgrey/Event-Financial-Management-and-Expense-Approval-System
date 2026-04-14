@@ -3,8 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>EFMS &mdash; Event Financial Management System</title>
-    <link rel="stylesheet" href="styles.css?v=5">
+    <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
     <header>
@@ -198,6 +201,13 @@
             </section>
 
             <section class="card">
+                <h2>Final Budget Closure</h2>
+                <p class="muted">Close an APPROVED budget after the event ends. All expenses must be approved or rejected first. Generates a financial summary and locks the budget from further submissions.</p>
+                <div id="closure-list"></div>
+                <div id="closure-summary"></div>
+            </section>
+
+            <section class="card">
                 <h2>Category Rules</h2>
                 <p class="muted">Finance-authority controls: set per-category caps, force L1+L2 above a threshold, or block a category entirely. Enforced at submit and at every approval step.</p>
                 <div id="rules-management-list"></div>
@@ -236,6 +246,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=5"></script>
+    <script src="app.js?v=6"></script>
 </body>
 </html>

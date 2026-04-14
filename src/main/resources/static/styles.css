@@ -165,6 +165,7 @@ button.link:hover:not(:disabled) { text-decoration: underline; background: none;
 .badge.SUBMITTED { background: var(--submitted); }
 .badge.APPROVED { background: var(--approved); }
 .badge.REJECTED { background: var(--rejected); }
+.badge.CLOSED { background: #374151; }
 
 /* ---------- Budget summary ---------- */
 .budget-summary {
@@ -458,6 +459,41 @@ tbody tr:last-child td { border-bottom: none; }
     font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
 }
 .rule-summary.blocked { color: var(--error); font-weight: 600; }
+
+/* ---------- Closure summary ---------- */
+.closure-card {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.125rem;
+    margin-bottom: 0.75rem;
+    background: #fafafa;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+.closure-card h4 { margin: 0 0 0.25rem; font-size: 1rem; }
+.closure-card .meta { color: var(--muted); font-size: 0.8125rem; margin: 0; }
+.closure-summary-card {
+    background: #ecfdf5;
+    border: 1px solid var(--success);
+    border-radius: 8px;
+    padding: 1.125rem;
+    margin-top: 1rem;
+}
+.closure-summary-card h3 { margin: 0 0 0.75rem; color: #065f46; }
+.summary-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+.summary-grid .stat { background: white; padding: 0.75rem; border-radius: 6px; }
+.summary-grid .stat strong { font-size: 1.1rem; }
+.variance-pos { color: var(--success); font-weight: 600; }
+.variance-neg { color: var(--error); font-weight: 600; }
+@media (max-width: 640px) { .summary-grid { grid-template-columns: 1fr 1fr; } }
 
 /* ---------- Rules management ---------- */
 .rules-budget-block {

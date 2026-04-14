@@ -2,6 +2,7 @@ package com.ooad.efms.service;
 
 import com.ooad.efms.dto.AddCategoryRequest;
 import com.ooad.efms.dto.AlertDTO;
+import com.ooad.efms.dto.BudgetClosureResponse;
 import com.ooad.efms.dto.BudgetResponse;
 import com.ooad.efms.dto.CreateEventRequest;
 import com.ooad.efms.exception.InvalidBudgetException;
@@ -9,10 +10,13 @@ import com.ooad.efms.exception.ResourceNotFoundException;
 import com.ooad.efms.model.Budget;
 import com.ooad.efms.model.BudgetStatus;
 import com.ooad.efms.model.Event;
+import com.ooad.efms.model.Expense;
 import com.ooad.efms.model.ExpenseCategory;
+import com.ooad.efms.model.ExpenseStatus;
 import com.ooad.efms.model.Organizer;
 import com.ooad.efms.repository.BudgetRepository;
 import com.ooad.efms.repository.EventRepository;
+import com.ooad.efms.repository.ExpenseRepository;
 import com.ooad.efms.repository.OrganizerRepository;
 import com.ooad.efms.strategy.ApprovalDecision;
 import com.ooad.efms.strategy.ApprovalStrategy;
@@ -42,6 +46,7 @@ public class BudgetService {
     private final EventRepository eventRepository;
     private final BudgetRepository budgetRepository;
     private final OrganizerRepository organizerRepository;
+    private final ExpenseRepository expenseRepository;
     private final VarianceAlertService varianceAlertService;
     private final ApprovalStrategy approvalStrategy;
     private final EntityManager entityManager;
@@ -49,12 +54,14 @@ public class BudgetService {
     public BudgetService(EventRepository eventRepository,
                          BudgetRepository budgetRepository,
                          OrganizerRepository organizerRepository,
+                         ExpenseRepository expenseRepository,
                          VarianceAlertService varianceAlertService,
                          ApprovalStrategy approvalStrategy,
                          EntityManager entityManager) {
         this.eventRepository = eventRepository;
         this.budgetRepository = budgetRepository;
         this.organizerRepository = organizerRepository;
+        this.expenseRepository = expenseRepository;
         this.varianceAlertService = varianceAlertService;
         this.approvalStrategy = approvalStrategy;
         this.entityManager = entityManager;
@@ -127,6 +134,42 @@ public class BudgetService {
 
     public List<BudgetResponse> listAll() {
         return budgetRepository.findAll().stream().map(BudgetResponse::from).toList();
+    }
+
+    /**
+     * UC #4 — Final Budget Closure.
+     * Guardrails:
+     *  - Budget must be APPROVED (only approved budgets host live expenses).
+     *  - No expense may still be PENDING_APPROVAL; every claim must be either
+     *    APPROVED or REJECTED so the financial picture is final.
+     * On success the budget is marked CLOSED (ExpenseService already rejects
+     * submissions for any status != APPROVED, so CLOSED is automatically
+     * locked down for new expenses).
+     */
+    public BudgetClosureResponse closeBudget(Long budgetId) {
+        Budget budget = loadBudget(budgetId);
+        if (budget.getStatus() != BudgetStatus.APPROVED) {
+            throw new InvalidBudgetException(
+                    "Only APPROVED budgets can be closed (current status: " + budget.getStatus() + ")");
+        }
+        List<Expense> expenses = expenseRepository.findByCategoryBudgetId(budgetId);
+        long pending = expenses.stream()
+                .filter(e -> e.getStatus() == ExpenseStatus.PENDING_APPROVAL)
+                .count();
+        if (pending > 0) {
+            throw new InvalidBudgetException(
+                    "Cannot close budget with " + pending + " pending expense(s); approve or reject them first");
+        }
+        budget.setStatus(BudgetStatus.CLOSED);
+        return BudgetClosureResponse.from(budget, expenses);
+    }
+
+    /** Read-only closure summary (does not mutate status). Useful for previewing the report. */
+    @Transactional(readOnly = true)
+    public BudgetClosureResponse getClosureSummary(Long budgetId) {
+        Budget budget = loadBudget(budgetId);
+        List<Expense> expenses = expenseRepository.findByCategoryBudgetId(budgetId);
+        return BudgetClosureResponse.from(budget, expenses);
     }
 
     /** UC #1 follow-up: list budgets awaiting manual approval (SUBMITTED state). */

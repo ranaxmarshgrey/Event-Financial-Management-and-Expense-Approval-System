@@ -2,6 +2,7 @@ package com.ooad.efms.controller;
 
 import com.ooad.efms.dto.AddCategoryRequest;
 import com.ooad.efms.dto.AlertDTO;
+import com.ooad.efms.dto.BudgetClosureResponse;
 import com.ooad.efms.dto.BudgetResponse;
 import com.ooad.efms.dto.CreateEventRequest;
 import com.ooad.efms.service.BudgetService;
@@ -66,5 +67,15 @@ public class BudgetController {
     @PostMapping("/{id}/manual-reject")
     public ResponseEntity<BudgetResponse> manualReject(@PathVariable Long id) {
         return ResponseEntity.ok(budgetService.manualReject(id));
+    }
+
+    @PostMapping("/{id}/close")
+    public ResponseEntity<BudgetClosureResponse> close(@PathVariable Long id) {
+        return ResponseEntity.ok(budgetService.closeBudget(id));
+    }
+
+    @GetMapping("/{id}/closure-summary")
+    public ResponseEntity<BudgetClosureResponse> closureSummary(@PathVariable Long id) {
+        return ResponseEntity.ok(budgetService.getClosureSummary(id));
     }
 }

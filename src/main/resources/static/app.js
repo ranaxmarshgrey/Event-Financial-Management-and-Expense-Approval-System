@@ -315,6 +315,7 @@ function switchMode(mode) {
         loadPendingBudgets();
         loadPendingExpenses();
         loadRulesManagement();
+        loadClosableBudgets();
     } else if (currentBudgetId) {
         // Refresh organizer view so status changes made from approver side are reflected.
         apiCall(`/budgets/${currentBudgetId}`).then(renderBudget).catch(() => {});
@@ -464,6 +465,87 @@ function showFeedback(kind, msg) {
     const area = document.getElementById('approval-feedback');
     area.innerHTML = `<div class="feedback ${kind}">${escapeHtml(msg)}</div>`;
     setTimeout(() => { if (area.firstChild && area.firstChild.textContent === msg) area.innerHTML = ''; }, 5000);
+}
+
+// ==================== Final Budget Closure (UC #4) ====================
+async function loadClosableBudgets() {
+    try {
+        const budgets = await apiCall('/budgets');
+        const list = document.getElementById('closure-list');
+        const closable = budgets.filter(b => b.status === 'APPROVED' || b.status === 'CLOSED');
+        if (closable.length === 0) {
+            list.innerHTML = '<div class="empty-pending">No APPROVED budgets available to close.</div>';
+            return;
+        }
+        list.innerHTML = closable.map(b => `<div class="closure-card">
+            <div>
+                <h4>${escapeHtml(b.eventName)} <span class="badge ${b.status}">${b.status}</span></h4>
+                <p class="meta">Budget #${b.id} &middot; limit ${formatMoney(b.totalLimit)} &middot; allocated ${formatMoney(b.allocatedTotal)}</p>
+            </div>
+            <div class="actions">
+                <button id="preview-${b.id}" type="button">Preview Summary</button>
+                ${b.status === 'APPROVED'
+                    ? `<button id="close-${b.id}" class="btn-reject" type="button">Close Budget</button>`
+                    : ''}
+            </div>
+        </div>`).join('');
+        closable.forEach(b => {
+            document.getElementById(`preview-${b.id}`).addEventListener('click', () => previewClosure(b.id));
+            if (b.status === 'APPROVED') {
+                document.getElementById(`close-${b.id}`).addEventListener('click', () => closeBudget(b.id));
+            }
+        });
+    } catch (err) { /* non-fatal */ }
+}
+
+async function previewClosure(budgetId) {
+    try {
+        const summary = await apiCall(`/budgets/${budgetId}/closure-summary`);
+        renderClosureSummary(summary, false);
+    } catch (err) {
+        showFeedback('err', err.message);
+    }
+}
+
+async function closeBudget(budgetId) {
+    if (!confirm('Close this budget? This is irreversible — no more expenses can be submitted.')) return;
+    try {
+        const summary = await apiCall(`/budgets/${budgetId}/close`, { method: 'POST' });
+        renderClosureSummary(summary, true);
+        loadClosableBudgets();
+        loadPendingBudgets();
+    } catch (err) {
+        showFeedback('err', err.message);
+    }
+}
+
+function renderClosureSummary(s, justClosed) {
+    const area = document.getElementById('closure-summary');
+    const rows = s.categories.map(c => {
+        const v = Number(c.variance);
+        const cls = v >= 0 ? 'variance-pos' : 'variance-neg';
+        return `<tr>
+            <td>${escapeHtml(c.name)}</td>
+            <td class="right">${formatMoney(c.allocated)}</td>
+            <td class="right">${formatMoney(c.spent)}</td>
+            <td class="right ${cls}">${formatMoney(c.variance)}</td>
+        </tr>`;
+    }).join('');
+    area.innerHTML = `<div class="closure-summary-card">
+        <h3>${justClosed ? 'Budget Closed &mdash; ' : 'Closure Summary Preview &mdash; '}${escapeHtml(s.eventName)} <span class="badge ${s.status}">${s.status}</span></h3>
+        <div class="summary-grid">
+            <div class="stat"><label>Total Budget</label><strong>${formatMoney(s.totalBudget)}</strong></div>
+            <div class="stat"><label>Total Allocated</label><strong>${formatMoney(s.totalAllocated)}</strong></div>
+            <div class="stat"><label>Total Spent</label><strong>${formatMoney(s.totalSpent)}</strong></div>
+            <div class="stat"><label>Remaining</label><strong>${formatMoney(s.remaining)}</strong></div>
+        </div>
+        <p class="muted">Approved claims: <strong>${s.approvedExpenseCount}</strong> &middot; Rejected claims: <strong>${s.rejectedExpenseCount}</strong></p>
+        <table>
+            <thead><tr><th>Category</th><th class="right">Allocated</th><th class="right">Spent</th><th class="right">Variance</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </div>`;
+    area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 
 // ==================== Rules management (finance-authority side) ====================
