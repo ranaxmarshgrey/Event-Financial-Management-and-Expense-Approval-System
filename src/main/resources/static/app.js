@@ -3,11 +3,13 @@
 
 const API = '/api';
 let currentBudgetId = null;
+let currentUser = null;
 
 // ==================== API helper ====================
 async function apiCall(path, options = {}) {
     const res = await fetch(API + path, {
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         ...options
     });
     const body = res.status === 204 ? null : await res.json();
@@ -37,14 +39,11 @@ function escapeHtml(s) {
 
 // ==================== Organizers ====================
 async function loadOrganizers() {
-    try {
-        const organizers = await apiCall('/organizers');
-        const select = document.getElementById('organizer-select');
-        select.innerHTML = organizers
-            .map(o => `<option value="${o.id}">${escapeHtml(o.name)} (${escapeHtml(o.email)})</option>`)
-            .join('');
-    } catch (err) {
-        alert('Failed to load organizers: ' + err.message);
+    // Authenticated organizer is the implicit submitter — pin the dropdown to them.
+    const select = document.getElementById('organizer-select');
+    if (currentUser && currentUser.role === 'ORGANIZER') {
+        select.innerHTML = `<option value="${currentUser.id}">${escapeHtml(currentUser.name)} (${escapeHtml(currentUser.email)})</option>`;
+        select.disabled = true;
     }
 }
 
@@ -57,7 +56,8 @@ document.getElementById('create-event-form').addEventListener('submit', async (e
         description: fd.get('description') || null,
         startDate: fd.get('startDate'),
         endDate: fd.get('endDate'),
-        organizerId: Number(fd.get('organizerId')),
+        // Disabled form fields aren't submitted, so read the id directly from the session.
+        organizerId: currentUser ? currentUser.id : Number(fd.get('organizerId')),
         totalBudget: Number(fd.get('totalBudget'))
     };
     try {
@@ -180,10 +180,9 @@ function renderExpenses(expenses) {
 document.getElementById('submit-expense-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const organizerId = Number(document.getElementById('organizer-select').value);
     const payload = {
         categoryId: Number(fd.get('categoryId')),
-        submittedById: organizerId,
+        submittedById: currentUser ? currentUser.id : Number(document.getElementById('organizer-select').value),
         description: fd.get('description'),
         amount: Number(fd.get('amount')),
         expenseDate: fd.get('expenseDate'),
@@ -311,7 +310,6 @@ function switchMode(mode) {
     document.getElementById('mode-organizer').classList.toggle('active', isOrg);
     document.getElementById('mode-approver').classList.toggle('active', !isOrg);
     if (!isOrg) {
-        loadApprovers();
         loadPendingBudgets();
         loadPendingExpenses();
         loadRulesManagement();
@@ -372,22 +370,6 @@ async function actOnBudget(budgetId, action) {
 }
 
 // ==================== Approver view (UC #3) ====================
-async function loadApprovers() {
-    try {
-        const approvers = await apiCall('/approving-authorities');
-        const select = document.getElementById('approver-select');
-        if (approvers.length === 0) {
-            select.innerHTML = '<option value="">(no approvers seeded)</option>';
-            return;
-        }
-        select.innerHTML = approvers
-            .map(a => `<option value="${a.id}">${escapeHtml(a.name)} &mdash; ${a.role} (limit ${formatMoney(a.approvalLimit)})</option>`)
-            .join('');
-    } catch (err) {
-        alert('Failed to load approvers: ' + err.message);
-    }
-}
-
 document.getElementById('btn-refresh-pending').addEventListener('click', loadPendingExpenses);
 
 async function loadPendingExpenses() {
@@ -436,8 +418,8 @@ function renderPendingCard(e, history) {
 }
 
 async function actOnExpense(expenseId, action) {
-    const approverId = Number(document.getElementById('approver-select').value);
-    if (!approverId) { showFeedback('err', 'Please pick an approver'); return; }
+    const approverId = currentUser ? currentUser.id : null;
+    if (!approverId) { showFeedback('err', 'Not signed in'); return; }
     try {
         if (action === 'approve') {
             const notes = prompt('Approval notes (optional):', '') || '';
@@ -533,6 +515,7 @@ function renderClosureSummary(s, justClosed) {
     }).join('');
     area.innerHTML = `<div class="closure-summary-card">
         <h3>${justClosed ? 'Budget Closed &mdash; ' : 'Closure Summary Preview &mdash; '}${escapeHtml(s.eventName)} <span class="badge ${s.status}">${s.status}</span></h3>
+        <p><a class="btn-download" href="/api/budgets/${s.budgetId}/closure-summary.csv" download>Download CSV</a></p>
         <div class="summary-grid">
             <div class="stat"><label>Total Budget</label><strong>${formatMoney(s.totalBudget)}</strong></div>
             <div class="stat"><label>Total Allocated</label><strong>${formatMoney(s.totalAllocated)}</strong></div>
@@ -644,5 +627,106 @@ document.getElementById('rule-form').addEventListener('submit', async (e) => {
     }
 });
 
+// ==================== Sidebar nav (approver shell) ====================
+const APPROVER_SECTIONS = ['section-budgets', 'section-expenses', 'section-closure', 'section-rules'];
+
+function showApproverSection(targetId) {
+    APPROVER_SECTIONS.forEach(id => {
+        document.getElementById(id)?.classList.toggle('hidden', id !== targetId);
+    });
+    document.querySelectorAll('.nav-link').forEach(l => {
+        l.classList.toggle('active', l.getAttribute('href') === '#' + targetId);
+    });
+}
+
+document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+        e.preventDefault();
+        showApproverSection(link.getAttribute('href').slice(1));
+    });
+});
+
+// ==================== Auth ====================
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    document.getElementById('login-error').textContent = '';
+    try {
+        const user = await apiCall('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email: fd.get('email'), password: fd.get('password') })
+        });
+        e.target.reset();
+        onAuthenticated(user);
+    } catch (err) {
+        document.getElementById('login-error').textContent = err.message;
+    }
+});
+
+document.getElementById('btn-logout').addEventListener('click', async () => {
+    try { await apiCall('/auth/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
+    currentUser = null;
+    currentBudgetId = null;
+    document.getElementById('login-view').classList.remove('hidden');
+    document.getElementById('organizer-view').classList.add('hidden');
+    document.getElementById('approver-view').classList.add('hidden');
+    document.getElementById('user-bar').classList.add('hidden');
+    document.getElementById('role-switch').classList.add('hidden');
+});
+
+function onAuthenticated(user) {
+    currentUser = user;
+    document.getElementById('login-view').classList.add('hidden');
+    document.getElementById('user-bar').classList.remove('hidden');
+    document.getElementById('user-name').textContent = user.name;
+    document.getElementById('user-role-tag').textContent = user.role;
+    // Each role sees only its own workspace — separation of duties.
+    document.getElementById('role-switch').classList.add('hidden');
+    if (user.role === 'ORGANIZER') {
+        document.getElementById('organizer-view').classList.remove('hidden');
+        document.getElementById('approver-view').classList.add('hidden');
+        loadOrganizers();
+        restoreOrganizerWorkspace();
+    } else {
+        document.getElementById('organizer-view').classList.add('hidden');
+        document.getElementById('approver-view').classList.remove('hidden');
+        loadPendingBudgets();
+        loadPendingExpenses();
+        loadRulesManagement();
+        loadClosableBudgets();
+        // Sidebar default: show only Pending Budgets, hide the rest.
+        showApproverSection('section-budgets');
+    }
+}
+
+// On reload, an organizer may already have an active (non-CLOSED, non-REJECTED)
+// budget — restore it instead of dumping them on the empty create-event form.
+async function restoreOrganizerWorkspace() {
+    if (!currentUser || currentUser.role !== 'ORGANIZER') return;
+    try {
+        const budgets = await apiCall('/budgets');
+        const mine = budgets
+            .filter(b => b.organizerId === currentUser.id
+                && b.status !== 'CLOSED'
+                && b.status !== 'REJECTED')
+            .sort((a, b) => b.id - a.id);
+        if (mine.length === 0) return;
+        const latest = mine[0];
+        currentBudgetId = latest.id;
+        renderBudget(latest);
+        document.getElementById('step-create').classList.add('hidden');
+        document.getElementById('workspace').classList.remove('hidden');
+    } catch (err) { /* non-fatal — leave create-event form visible */ }
+}
+
+async function bootstrapAuth() {
+    try {
+        const user = await apiCall('/auth/me');
+        onAuthenticated(user);
+    } catch (err) {
+        // Not signed in — login view stays visible.
+    }
+}
+
 // ==================== Init ====================
-loadOrganizers();
+bootstrapAuth();

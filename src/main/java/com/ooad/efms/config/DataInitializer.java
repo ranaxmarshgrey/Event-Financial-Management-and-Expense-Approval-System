@@ -8,6 +8,7 @@ import com.ooad.efms.repository.OrganizerRepository;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 
 import java.math.BigDecimal;
 
@@ -21,17 +22,24 @@ public class DataInitializer {
     @Bean
     CommandLineRunner seed(OrganizerRepository organizerRepository,
                            ApprovingAuthorityRepository authorityRepository) {
+        BCryptPasswordEncoder encoder = new BCryptPasswordEncoder();
         return args -> {
             if (organizerRepository.count() == 0) {
-                organizerRepository.save(new Organizer("Demo Organizer", "demo@college.edu"));
+                Organizer o = new Organizer("Demo Organizer", "demo@college.edu");
+                o.setPasswordHash(encoder.encode("demo123"));
+                organizerRepository.save(o);
             }
             if (authorityRepository.count() == 0) {
-                authorityRepository.save(new ApprovingAuthority(
+                ApprovingAuthority l1 = new ApprovingAuthority(
                         "Dr. Faculty Coord", "coord@college.edu",
-                        ApprovalRole.L1, new BigDecimal("3000")));
-                authorityRepository.save(new ApprovingAuthority(
+                        ApprovalRole.L1, new BigDecimal("3000"));
+                l1.setPasswordHash(encoder.encode("coord123"));
+                authorityRepository.save(l1);
+                ApprovingAuthority l2 = new ApprovingAuthority(
                         "Prof. Finance Chair", "finance@college.edu",
-                        ApprovalRole.L2, new BigDecimal("50000")));
+                        ApprovalRole.L2, new BigDecimal("50000"));
+                l2.setPasswordHash(encoder.encode("finance123"));
+                authorityRepository.save(l2);
             }
         };
     }

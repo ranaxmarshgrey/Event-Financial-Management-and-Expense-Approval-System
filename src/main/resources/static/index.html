@@ -7,21 +7,41 @@
     <meta http-equiv="Pragma" content="no-cache">
     <meta http-equiv="Expires" content="0">
     <title>EFMS &mdash; Event Financial Management System</title>
-    <link rel="stylesheet" href="styles.css?v=6">
+    <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
     <header>
         <h1>Event Financial Management System</h1>
         <p class="subtitle">OOAD Mini Project &middot; Spring Boot MVC</p>
-        <div class="role-switch">
+        <div id="user-bar" class="hidden">
+            Signed in as <strong id="user-name"></strong> <span id="user-role-tag"></span>
+            <button id="btn-logout" type="button" class="btn-logout">Logout</button>
+        </div>
+        <div id="role-switch" class="role-switch hidden">
             <button id="mode-organizer" class="mode-btn active">Organizer</button>
             <button id="mode-approver" class="mode-btn">Approving Authority</button>
         </div>
     </header>
 
     <main>
+        <!-- ================= LOGIN VIEW ================= -->
+        <section id="login-view" class="card">
+            <h2>Sign in</h2>
+            <p class="muted">Demo accounts &mdash; organizer: <code>demo@college.edu / demo123</code> &middot; L1: <code>coord@college.edu / coord123</code> &middot; L2: <code>finance@college.edu / finance123</code></p>
+            <form id="login-form">
+                <div class="form-row single">
+                    <label>Email <input type="email" name="email" required></label>
+                </div>
+                <div class="form-row single">
+                    <label>Password <input type="password" name="password" required></label>
+                </div>
+                <button type="submit" class="primary">Sign in</button>
+                <span id="login-error" class="login-error"></span>
+            </form>
+        </section>
+
         <!-- ================= ORGANIZER VIEW ================= -->
-        <div id="organizer-view">
+        <div id="organizer-view" class="hidden">
             <!-- STEP 1: Create event + draft budget -->
             <section id="step-create" class="card">
                 <h2><span class="step-num">1</span> Create Event &amp; Draft Budget</h2>
@@ -172,46 +192,50 @@
         </div>
 
         <!-- ================= APPROVER VIEW (UC #3) ================= -->
-        <div id="approver-view" class="hidden">
-            <section class="card">
-                <h2>Approving Authority &mdash; Pending Budgets</h2>
+        <div id="approver-view" class="hidden approver-shell">
+            <aside class="sidebar">
+                <h3>Authority Console</h3>
+                <nav>
+                    <a href="#section-budgets" class="nav-link active">Pending Budgets</a>
+                    <a href="#section-expenses" class="nav-link">Pending Expenses</a>
+                    <a href="#section-closure" class="nav-link">Final Closure</a>
+                    <a href="#section-rules" class="nav-link">Category Rules</a>
+                </nav>
+            </aside>
+            <div class="approver-main">
+            <section id="section-budgets" class="card">
+                <h2>Pending Budgets</h2>
                 <p class="muted">Budgets above the auto-approval threshold need a manual decision here.</p>
                 <div id="pending-budgets-list"></div>
             </section>
-            <section class="card">
-                <h2>Approving Authority &mdash; Pending Expense Claims</h2>
+            <section id="section-expenses" class="card">
+                <h2>Pending Expense Claims</h2>
                 <p class="muted">
                     Review submitted expense claims. The approval Chain-of-Responsibility
                     enforces budget availability, category rules, and your personal approval limit.
                 </p>
 
-                <div class="form-row">
-                    <label>
-                        Acting as
-                        <select id="approver-select" required></select>
-                    </label>
-                    <label>
-                        &nbsp;
-                        <button id="btn-refresh-pending" type="button">Refresh Pending</button>
-                    </label>
+                <div class="actions-row">
+                    <button id="btn-refresh-pending" type="button">Refresh Pending</button>
                 </div>
 
                 <div id="pending-list"></div>
                 <div id="approval-feedback"></div>
             </section>
 
-            <section class="card">
+            <section id="section-closure" class="card">
                 <h2>Final Budget Closure</h2>
                 <p class="muted">Close an APPROVED budget after the event ends. All expenses must be approved or rejected first. Generates a financial summary and locks the budget from further submissions.</p>
                 <div id="closure-list"></div>
                 <div id="closure-summary"></div>
             </section>
 
-            <section class="card">
+            <section id="section-rules" class="card">
                 <h2>Category Rules</h2>
                 <p class="muted">Finance-authority controls: set per-category caps, force L1+L2 above a threshold, or block a category entirely. Enforced at submit and at every approval step.</p>
                 <div id="rules-management-list"></div>
             </section>
+            </div>
         </div>
 
         <footer class="footer">
@@ -246,6 +270,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=6"></script>
+    <script src="app.js?v=10"></script>
 </body>
 </html>

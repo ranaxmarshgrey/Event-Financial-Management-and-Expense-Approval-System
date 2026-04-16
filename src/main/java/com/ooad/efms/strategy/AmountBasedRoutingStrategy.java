@@ -19,7 +19,7 @@ import java.math.BigDecimal;
 @Primary
 public class AmountBasedRoutingStrategy implements ApprovalRoutingStrategy {
 
-    private static final BigDecimal THRESHOLD = new BigDecimal("2000");
+    private static final BigDecimal THRESHOLD = new BigDecimal("3000");
 
     @Override
     public ApprovalLevel routeFor(Expense expense) {

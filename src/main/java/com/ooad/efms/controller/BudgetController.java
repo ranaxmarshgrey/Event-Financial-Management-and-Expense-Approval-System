@@ -8,6 +8,8 @@ import com.ooad.efms.dto.CreateEventRequest;
 import com.ooad.efms.service.BudgetService;
 import com.ooad.efms.strategy.ApprovalDecision;
 import jakarta.validation.Valid;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -77,5 +79,40 @@ public class BudgetController {
     @GetMapping("/{id}/closure-summary")
     public ResponseEntity<BudgetClosureResponse> closureSummary(@PathVariable Long id) {
         return ResponseEntity.ok(budgetService.getClosureSummary(id));
+    }
+
+    @GetMapping(value = "/{id}/closure-summary.csv", produces = "text/csv")
+    public ResponseEntity<String> closureSummaryCsv(@PathVariable Long id) {
+        BudgetClosureResponse s = budgetService.getClosureSummary(id);
+        StringBuilder csv = new StringBuilder();
+        csv.append("Event,").append(escape(s.getEventName())).append('\n');
+        csv.append("Budget ID,").append(s.getBudgetId()).append('\n');
+        csv.append("Status,").append(s.getStatus()).append('\n');
+        csv.append("Total Budget,").append(s.getTotalBudget()).append('\n');
+        csv.append("Total Allocated,").append(s.getTotalAllocated()).append('\n');
+        csv.append("Total Spent,").append(s.getTotalSpent()).append('\n');
+        csv.append("Remaining,").append(s.getRemaining()).append('\n');
+        csv.append("Approved Claims,").append(s.getApprovedExpenseCount()).append('\n');
+        csv.append("Rejected Claims,").append(s.getRejectedExpenseCount()).append('\n');
+        csv.append('\n');
+        csv.append("Category,Allocated,Spent,Variance\n");
+        s.getCategories().forEach(c -> csv.append(escape(c.getName())).append(',')
+                .append(c.getAllocated()).append(',')
+                .append(c.getSpent()).append(',')
+                .append(c.getVariance()).append('\n'));
+        String filename = "budget-" + id + "-closure-summary.csv";
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(csv.toString());
+    }
+
+    /** RFC 4180 minimal escaping: wrap in quotes if value contains comma, quote, or newline. */
+    private static String escape(String v) {
+        if (v == null) return "";
+        if (v.contains(",") || v.contains("\"") || v.contains("\n")) {
+            return "\"" + v.replace("\"", "\"\"") + "\"";
+        }
+        return v;
     }
 }
