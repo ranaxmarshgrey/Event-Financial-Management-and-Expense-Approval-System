@@ -11,5 +11,6 @@ public enum BudgetStatus {
     READY,
     SUBMITTED,
     APPROVED,
-    REJECTED
+    REJECTED,
+    CLOSED
 }

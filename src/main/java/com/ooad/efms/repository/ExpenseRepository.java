@@ -14,6 +14,8 @@ public interface ExpenseRepository extends JpaRepository<Expense, Long> {
 
     List<Expense> findByCategoryBudgetId(Long budgetId);
 
+    List<Expense> findByStatusOrderBySubmittedAtAsc(ExpenseStatus status);
+
     /**
      * Sum of expenses against a category that are not yet rejected — used to
      * enforce category headroom at submission time so pending claims still

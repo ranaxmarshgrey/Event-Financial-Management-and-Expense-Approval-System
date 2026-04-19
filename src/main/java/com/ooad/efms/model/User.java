@@ -26,6 +26,10 @@ public abstract class User {
     @Column(nullable = false, unique = true)
     private String email;
 
+    /** BCrypt hash of the user's password. Nullable for legacy/seed records. */
+    @Column(name = "password_hash")
+    private String passwordHash;
+
     protected User() {}
 
     protected User(String name, String email) {
@@ -41,4 +45,6 @@ public abstract class User {
     public void setName(String name) { this.name = name; }
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }
+    public String getPasswordHash() { return passwordHash; }
+    public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
 }

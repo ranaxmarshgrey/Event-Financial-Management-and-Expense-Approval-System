@@ -3,167 +3,273 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EFMS — Event Financial Management System</title>
-    <link rel="stylesheet" href="styles.css">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <title>EFMS &mdash; Event Financial Management System</title>
+    <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
     <header>
         <h1>Event Financial Management System</h1>
-        <p class="subtitle">Create Event Budget · Event Organizer Portal</p>
+        <p class="subtitle">OOAD Mini Project &middot; Spring Boot MVC</p>
+        <div id="user-bar" class="hidden">
+            Signed in as <strong id="user-name"></strong> <span id="user-role-tag"></span>
+            <button id="btn-logout" type="button" class="btn-logout">Logout</button>
+        </div>
+        <div id="role-switch" class="role-switch hidden">
+            <button id="mode-organizer" class="mode-btn active">Organizer</button>
+            <button id="mode-approver" class="mode-btn">Approving Authority</button>
+        </div>
     </header>
 
     <main>
-        <!-- STEP 1: Create event + draft budget -->
-        <section id="step-create" class="card">
-            <h2><span class="step-num">1</span> Create Event &amp; Draft Budget</h2>
-            <form id="create-event-form">
-                <div class="form-row">
-                    <label>
-                        Event Name
-                        <input type="text" name="name" placeholder="e.g. TechFest 2026" required>
-                    </label>
-                    <label>
-                        Description
-                        <input type="text" name="description" placeholder="Optional">
-                    </label>
+        <!-- ================= LOGIN VIEW ================= -->
+        <section id="login-view" class="card">
+            <h2>Sign in</h2>
+            <p class="muted">Demo accounts &mdash; organizer: <code>demo@college.edu / demo123</code> &middot; L1: <code>coord@college.edu / coord123</code> &middot; L2: <code>finance@college.edu / finance123</code></p>
+            <form id="login-form">
+                <div class="form-row single">
+                    <label>Email <input type="email" name="email" required></label>
                 </div>
-                <div class="form-row">
-                    <label>
-                        Start Date
-                        <input type="date" name="startDate" required>
-                    </label>
-                    <label>
-                        End Date
-                        <input type="date" name="endDate" required>
-                    </label>
+                <div class="form-row single">
+                    <label>Password <input type="password" name="password" required></label>
                 </div>
-                <div class="form-row">
-                    <label>
-                        Organizer
-                        <select name="organizerId" id="organizer-select" required></select>
-                    </label>
-                    <label>
-                        Total Budget (&#8377;)
-                        <input type="number" name="totalBudget" step="0.01" min="0.01" placeholder="e.g. 8000" required>
-                    </label>
-                </div>
-                <button type="submit" class="primary">Create Draft Budget</button>
+                <button type="submit" class="primary">Sign in</button>
+                <span id="login-error" class="login-error"></span>
             </form>
         </section>
 
-        <!-- STEP 2+: Budget workspace -->
-        <section id="workspace" class="card hidden">
-            <div class="budget-header">
-                <div>
-                    <h2 id="workspace-title"></h2>
-                    <p id="workspace-meta" class="muted"></p>
-                </div>
-                <span id="status-badge" class="badge">DRAFT</span>
-            </div>
-
-            <div class="budget-summary">
-                <div class="stat">
-                    <label>Total Limit</label>
-                    <strong id="stat-limit">—</strong>
-                </div>
-                <div class="stat">
-                    <label>Allocated</label>
-                    <strong id="stat-allocated">—</strong>
-                </div>
-                <div class="stat">
-                    <label>Remaining</label>
-                    <strong id="stat-remaining">—</strong>
-                </div>
-            </div>
-
-            <!-- STEP 2: Categories -->
-            <div class="subsection">
-                <h3><span class="step-num">2</span> Expense Categories</h3>
-                <table id="categories-table">
-                    <thead>
-                        <tr>
-                            <th>Category</th>
-                            <th class="right">Allocated</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
-                <form id="add-category-form" class="inline-form">
-                    <input type="text" name="name" placeholder="Category name (e.g. Food)" required>
-                    <input type="number" name="allocatedAmount" step="0.01" min="0.01" placeholder="Amount" required>
-                    <button type="submit">Add Category</button>
-                </form>
-            </div>
-
-            <!-- STEP 3 + 4: Actions -->
-            <div class="subsection">
-                <h3><span class="step-num">3</span> Validate &amp; Submit</h3>
-                <div class="actions">
-                    <button id="btn-validate">Validate Budget</button>
-                    <button id="btn-submit" class="primary">Submit for Approval</button>
-                </div>
-                <div id="alerts-area"></div>
-                <div id="decision-area"></div>
-            </div>
-
-            <!-- STEP 5: Submit Expense Claim (UC #2) -->
-            <div id="expense-section" class="subsection hidden">
-                <h3><span class="step-num">5</span> Submit Expense Claim</h3>
-                <p class="muted expense-hint">Budget is APPROVED — organizers can now submit expense claims against its categories.</p>
-                <form id="submit-expense-form">
+        <!-- ================= ORGANIZER VIEW ================= -->
+        <div id="organizer-view" class="hidden">
+            <!-- STEP 1: Create event + draft budget -->
+            <section id="step-create" class="card">
+                <h2><span class="step-num">1</span> Create Event &amp; Draft Budget</h2>
+                <form id="create-event-form">
                     <div class="form-row">
                         <label>
-                            Category
-                            <select name="categoryId" id="expense-category-select" required></select>
+                            Event Name
+                            <input type="text" name="name" placeholder="e.g. TechFest 2026" required>
                         </label>
-                        <label>
-                            Amount (&#8377;)
-                            <input type="number" name="amount" step="0.01" min="0.01" placeholder="e.g. 1500" required>
-                        </label>
-                    </div>
-                    <div class="form-row">
-                        <label>
-                            Expense Date
-                            <input type="date" name="expenseDate" required>
-                        </label>
-                        <label>
-                            Supporting Doc URL
-                            <input type="url" name="supportingDocUrl" placeholder="Optional">
-                        </label>
-                    </div>
-                    <div class="form-row single">
                         <label>
                             Description
-                            <input type="text" name="description" placeholder="e.g. Catering for day 1" required>
+                            <input type="text" name="description" placeholder="Optional">
                         </label>
                     </div>
-                    <button type="submit" class="primary">Submit Expense</button>
-                    <span id="routing-policy-tag" class="policy-tag"></span>
+                    <div class="form-row">
+                        <label>
+                            Start Date
+                            <input type="date" name="startDate" required>
+                        </label>
+                        <label>
+                            End Date
+                            <input type="date" name="endDate" required>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label>
+                            Organizer
+                            <select name="organizerId" id="organizer-select" required></select>
+                        </label>
+                        <label>
+                            Total Budget (&#8377;)
+                            <input type="number" name="totalBudget" step="0.01" min="0.01" placeholder="e.g. 8000" required>
+                        </label>
+                    </div>
+                    <button type="submit" class="primary">Create Draft Budget</button>
                 </form>
+            </section>
 
-                <h4 class="expense-list-title">Submitted Expenses</h4>
-                <table id="expenses-table">
-                    <thead>
-                        <tr>
-                            <th>Description</th>
-                            <th>Category</th>
-                            <th class="right">Amount</th>
-                            <th>Approval Chain</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody></tbody>
-                </table>
+            <!-- STEP 2+: Budget workspace -->
+            <section id="workspace" class="card hidden">
+                <div class="budget-header">
+                    <div>
+                        <h2 id="workspace-title"></h2>
+                        <p id="workspace-meta" class="muted"></p>
+                    </div>
+                    <span id="status-badge" class="badge">DRAFT</span>
+                </div>
+
+                <div class="budget-summary">
+                    <div class="stat">
+                        <label>Total Limit</label>
+                        <strong id="stat-limit">&mdash;</strong>
+                    </div>
+                    <div class="stat">
+                        <label>Allocated</label>
+                        <strong id="stat-allocated">&mdash;</strong>
+                    </div>
+                    <div class="stat">
+                        <label>Remaining</label>
+                        <strong id="stat-remaining">&mdash;</strong>
+                    </div>
+                </div>
+
+                <!-- STEP 2: Categories -->
+                <div class="subsection">
+                    <h3><span class="step-num">2</span> Expense Categories</h3>
+                    <table id="categories-table">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th class="right">Allocated</th>
+                                <th class="right">Spent</th>
+                                <th>Rules</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <form id="add-category-form" class="inline-form">
+                        <input type="text" name="name" placeholder="Category name (e.g. Food)" required>
+                        <input type="number" name="allocatedAmount" step="0.01" min="0.01" placeholder="Amount" required>
+                        <button type="submit">Add Category</button>
+                    </form>
+                </div>
+
+                <!-- STEP 3 + 4: Actions -->
+                <div class="subsection">
+                    <h3><span class="step-num">3</span> Validate &amp; Submit</h3>
+                    <div class="actions">
+                        <button id="btn-validate">Validate Budget</button>
+                        <button id="btn-submit" class="primary">Submit for Approval</button>
+                    </div>
+                    <div id="alerts-area"></div>
+                    <div id="decision-area"></div>
+                </div>
+
+                <!-- STEP 5: Submit Expense Claim (UC #2) -->
+                <div id="expense-section" class="subsection hidden">
+                    <h3><span class="step-num">5</span> Submit Expense Claim</h3>
+                    <p class="muted expense-hint">Budget is APPROVED &mdash; organizers can now submit expense claims against its categories.</p>
+                    <form id="submit-expense-form">
+                        <div class="form-row">
+                            <label>
+                                Category
+                                <select name="categoryId" id="expense-category-select" required></select>
+                            </label>
+                            <label>
+                                Amount (&#8377;)
+                                <input type="number" name="amount" step="0.01" min="0.01" placeholder="e.g. 1500" required>
+                            </label>
+                        </div>
+                        <div class="form-row">
+                            <label>
+                                Expense Date
+                                <input type="date" name="expenseDate" required>
+                            </label>
+                            <label>
+                                Supporting Doc URL
+                                <input type="url" name="supportingDocUrl" placeholder="Optional">
+                            </label>
+                        </div>
+                        <div class="form-row single">
+                            <label>
+                                Description
+                                <input type="text" name="description" placeholder="e.g. Catering for day 1" required>
+                            </label>
+                        </div>
+                        <button type="submit" class="primary">Submit Expense</button>
+                        <span id="routing-policy-tag" class="policy-tag"></span>
+                    </form>
+
+                    <h4 class="expense-list-title">Submitted Expenses</h4>
+                    <table id="expenses-table">
+                        <thead>
+                            <tr>
+                                <th>Description</th>
+                                <th>Category</th>
+                                <th class="right">Amount</th>
+                                <th>Chain</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+
+                <button id="btn-reset" class="link">&larr; Start over with a new event</button>
+            </section>
+        </div>
+
+        <!-- ================= APPROVER VIEW (UC #3) ================= -->
+        <div id="approver-view" class="hidden approver-shell">
+            <aside class="sidebar">
+                <h3>Authority Console</h3>
+                <nav>
+                    <a href="#section-budgets" class="nav-link active">Pending Budgets</a>
+                    <a href="#section-expenses" class="nav-link">Pending Expenses</a>
+                    <a href="#section-closure" class="nav-link">Final Closure</a>
+                    <a href="#section-rules" class="nav-link">Category Rules</a>
+                </nav>
+            </aside>
+            <div class="approver-main">
+            <section id="section-budgets" class="card">
+                <h2>Pending Budgets</h2>
+                <p class="muted">Budgets above the auto-approval threshold need a manual decision here.</p>
+                <div id="pending-budgets-list"></div>
+            </section>
+            <section id="section-expenses" class="card">
+                <h2>Pending Expense Claims</h2>
+                <p class="muted">
+                    Review submitted expense claims. The approval Chain-of-Responsibility
+                    enforces budget availability, category rules, and your personal approval limit.
+                </p>
+
+                <div class="actions-row">
+                    <button id="btn-refresh-pending" type="button">Refresh Pending</button>
+                </div>
+
+                <div id="pending-list"></div>
+                <div id="approval-feedback"></div>
+            </section>
+
+            <section id="section-closure" class="card">
+                <h2>Final Budget Closure</h2>
+                <p class="muted">Close an APPROVED budget after the event ends. All expenses must be approved or rejected first. Generates a financial summary and locks the budget from further submissions.</p>
+                <div id="closure-list"></div>
+                <div id="closure-summary"></div>
+            </section>
+
+            <section id="section-rules" class="card">
+                <h2>Category Rules</h2>
+                <p class="muted">Finance-authority controls: set per-category caps, force L1+L2 above a threshold, or block a category entirely. Enforced at submit and at every approval step.</p>
+                <div id="rules-management-list"></div>
+            </section>
             </div>
-
-            <button id="btn-reset" class="link">&larr; Start over with a new event</button>
-        </section>
+        </div>
 
         <footer class="footer">
-            <p>Spring Boot MVC · Strategy Pattern · H2 In-Memory DB · OOAD Mini Project</p>
+            <p>Spring Boot MVC &middot; Strategy + Chain-of-Responsibility &middot; H2 In-Memory DB &middot; OOAD Mini Project</p>
         </footer>
     </main>
 
-    <script src="app.js"></script>
+    <!-- Category Rule modal -->
+    <div id="rule-modal" class="modal hidden">
+        <div class="modal-content">
+            <h3>Category Rules <span id="rule-modal-cat" class="muted"></span></h3>
+            <p class="muted">Minor UC #3 &mdash; per-category constraints enforced at submit and approval time.</p>
+            <form id="rule-form">
+                <input type="hidden" id="rule-category-id">
+                <label>
+                    Max expense amount (cap per single claim)
+                    <input type="number" id="rule-max" step="0.01" min="0" placeholder="blank = no cap">
+                </label>
+                <label>
+                    Amounts above this always need L1+L2
+                    <input type="number" id="rule-l2-above" step="0.01" min="0" placeholder="blank = off">
+                </label>
+                <label class="checkbox-row">
+                    <input type="checkbox" id="rule-blocked">
+                    Block new expenses in this category
+                </label>
+                <div class="modal-actions">
+                    <button type="button" class="link" id="rule-cancel">Cancel</button>
+                    <button type="submit" class="primary">Save Rules</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="app.js?v=10"></script>
 </body>
 </html>

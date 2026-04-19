@@ -3,11 +3,13 @@
 
 const API = '/api';
 let currentBudgetId = null;
+let currentUser = null;
 
 // ==================== API helper ====================
 async function apiCall(path, options = {}) {
     const res = await fetch(API + path, {
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
         ...options
     });
     const body = res.status === 204 ? null : await res.json();
@@ -37,14 +39,11 @@ function escapeHtml(s) {
 
 // ==================== Organizers ====================
 async function loadOrganizers() {
-    try {
-        const organizers = await apiCall('/organizers');
-        const select = document.getElementById('organizer-select');
-        select.innerHTML = organizers
-            .map(o => `<option value="${o.id}">${escapeHtml(o.name)} (${escapeHtml(o.email)})</option>`)
-            .join('');
-    } catch (err) {
-        alert('Failed to load organizers: ' + err.message);
+    // Authenticated organizer is the implicit submitter — pin the dropdown to them.
+    const select = document.getElementById('organizer-select');
+    if (currentUser && currentUser.role === 'ORGANIZER') {
+        select.innerHTML = `<option value="${currentUser.id}">${escapeHtml(currentUser.name)} (${escapeHtml(currentUser.email)})</option>`;
+        select.disabled = true;
     }
 }
 
@@ -57,7 +56,8 @@ document.getElementById('create-event-form').addEventListener('submit', async (e
         description: fd.get('description') || null,
         startDate: fd.get('startDate'),
         endDate: fd.get('endDate'),
-        organizerId: Number(fd.get('organizerId')),
+        // Disabled form fields aren't submitted, so read the id directly from the session.
+        organizerId: currentUser ? currentUser.id : Number(fd.get('organizerId')),
         totalBudget: Number(fd.get('totalBudget'))
     };
     try {
@@ -90,14 +90,19 @@ function renderBudget(budget) {
 
     const tbody = document.querySelector('#categories-table tbody');
     if (!budget.categories || budget.categories.length === 0) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="2">No categories yet &mdash; add one below</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="4">No categories yet &mdash; add one below</td></tr>';
     } else {
         tbody.innerHTML = budget.categories
             .map(c => `<tr>
                 <td>${escapeHtml(c.name)}</td>
                 <td class="right">${formatMoney(c.allocatedAmount)}</td>
+                <td class="right">${formatMoney(c.spentAmount || 0)}</td>
+                <td class="rule-cell">
+                    <span class="rule-summary" id="rule-summary-${c.id}"></span>
+                </td>
             </tr>`)
             .join('');
+        budget.categories.forEach(c => refreshRuleSummary(c.id));
     }
 
     // Categories can only be added while the budget is in DRAFT.
@@ -175,10 +180,9 @@ function renderExpenses(expenses) {
 document.getElementById('submit-expense-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
-    const organizerId = Number(document.getElementById('organizer-select').value);
     const payload = {
         categoryId: Number(fd.get('categoryId')),
-        submittedById: organizerId,
+        submittedById: currentUser ? currentUser.id : Number(document.getElementById('organizer-select').value),
         description: fd.get('description'),
         amount: Number(fd.get('amount')),
         expenseDate: fd.get('expenseDate'),
@@ -249,6 +253,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
     document.getElementById('workspace').classList.add('hidden');
     document.getElementById('step-create').classList.remove('hidden');
     document.getElementById('create-event-form').reset();
+    document.getElementById('rule-modal').classList.add('hidden');
     clearAlerts();
 });
 
@@ -294,5 +299,434 @@ function renderSubmitBlocked(message) {
     </div>`;
 }
 
+// ==================== View switching (Organizer vs Approver) ====================
+document.getElementById('mode-organizer').addEventListener('click', () => switchMode('organizer'));
+document.getElementById('mode-approver').addEventListener('click', () => switchMode('approver'));
+
+function switchMode(mode) {
+    const isOrg = mode === 'organizer';
+    document.getElementById('organizer-view').classList.toggle('hidden', !isOrg);
+    document.getElementById('approver-view').classList.toggle('hidden', isOrg);
+    document.getElementById('mode-organizer').classList.toggle('active', isOrg);
+    document.getElementById('mode-approver').classList.toggle('active', !isOrg);
+    if (!isOrg) {
+        loadPendingBudgets();
+        loadPendingExpenses();
+        loadRulesManagement();
+        loadClosableBudgets();
+    } else if (currentBudgetId) {
+        // Refresh organizer view so status changes made from approver side are reflected.
+        apiCall(`/budgets/${currentBudgetId}`).then(renderBudget).catch(() => {});
+    }
+}
+
+async function loadPendingBudgets() {
+    try {
+        const pending = await apiCall('/budgets/pending-approval');
+        const list = document.getElementById('pending-budgets-list');
+        if (pending.length === 0) {
+            list.innerHTML = '<div class="empty-pending">No budgets awaiting approval.</div>';
+            return;
+        }
+        list.innerHTML = pending.map(b => {
+            const cats = (b.categories || []).map(c =>
+                `<tr><td>${escapeHtml(c.name)}</td><td class="right">${formatMoney(c.allocatedAmount)}</td></tr>`).join('')
+                || '<tr class="empty-row"><td colspan="2">No categories defined</td></tr>';
+            return `<div class="pending-card">
+                <div class="top">
+                    <div>
+                        <h4>${escapeHtml(b.eventName)}</h4>
+                        <p class="meta">Budget #${b.id} &middot; allocated ${formatMoney(b.allocatedTotal)} of ${formatMoney(b.totalLimit)}</p>
+                    </div>
+                    <div class="amount">${formatMoney(b.totalLimit)}</div>
+                </div>
+                <table class="mini-table">
+                    <thead><tr><th>Category</th><th class="right">Allocated</th></tr></thead>
+                    <tbody>${cats}</tbody>
+                </table>
+                <div class="actions">
+                    <button id="budget-approve-${b.id}" class="primary">Approve Budget</button>
+                    <button id="budget-reject-${b.id}" class="btn-reject">Reject Budget</button>
+                </div>
+            </div>`;
+        }).join('');
+        pending.forEach(b => {
+            document.getElementById(`budget-approve-${b.id}`).addEventListener('click', () => actOnBudget(b.id, 'manual-approve'));
+            document.getElementById(`budget-reject-${b.id}`).addEventListener('click', () => actOnBudget(b.id, 'manual-reject'));
+        });
+    } catch (err) {
+        /* non-fatal */
+    }
+}
+
+async function actOnBudget(budgetId, action) {
+    try {
+        await apiCall(`/budgets/${budgetId}/${action}`, { method: 'POST' });
+        showFeedback('ok', `Budget #${budgetId} ${action === 'manual-approve' ? 'approved' : 'rejected'}.`);
+        loadPendingBudgets();
+    } catch (err) {
+        showFeedback('err', err.message);
+    }
+}
+
+// ==================== Approver view (UC #3) ====================
+document.getElementById('btn-refresh-pending').addEventListener('click', loadPendingExpenses);
+
+async function loadPendingExpenses() {
+    try {
+        const pending = await apiCall('/expenses/pending');
+        const list = document.getElementById('pending-list');
+        if (pending.length === 0) {
+            list.innerHTML = '<div class="empty-pending">No expenses are currently awaiting approval.</div>';
+            return;
+        }
+        // Fetch history for each so we can show "L1 approved" etc.
+        const histories = await Promise.all(pending.map(e => apiCall(`/expenses/${e.id}/history`)));
+        list.innerHTML = pending.map((e, i) => renderPendingCard(e, histories[i])).join('');
+        pending.forEach(e => {
+            document.getElementById(`approve-${e.id}`).addEventListener('click', () => actOnExpense(e.id, 'approve'));
+            document.getElementById(`reject-${e.id}`).addEventListener('click', () => actOnExpense(e.id, 'reject'));
+        });
+    } catch (err) {
+        alert('Failed to load pending expenses: ' + err.message);
+    }
+}
+
+function renderPendingCard(e, history) {
+    const historyHtml = history.length > 0
+        ? `<div class="history">${history.map(h =>
+            `<div class="history-item ${h.action}"><strong>${h.action}</strong> by ${escapeHtml(h.approverName)} (${h.approverRole})${h.notes ? ' &mdash; ' + escapeHtml(h.notes) : ''}</div>`).join('')}</div>`
+        : '';
+    return `<div class="pending-card">
+        <div class="top">
+            <div>
+                <h4>${escapeHtml(e.description)}</h4>
+                <p class="meta">Category: <strong>${escapeHtml(e.categoryName)}</strong> &middot; submitted by ${escapeHtml(e.submittedBy)} on ${e.expenseDate}</p>
+                <div class="chip-row">
+                    <span class="level-badge ${e.requiredApprovalLevel}">${e.requiredApprovalLevel.replace(/_/g, ' ')}</span>
+                    <span class="expense-status ${e.status}">${e.status.replace(/_/g, ' ')}</span>
+                </div>
+            </div>
+            <div class="amount">${formatMoney(e.amount)}</div>
+        </div>
+        ${historyHtml}
+        <div class="actions">
+            <button id="approve-${e.id}" class="primary">Approve</button>
+            <button id="reject-${e.id}" class="btn-reject">Reject</button>
+        </div>
+    </div>`;
+}
+
+async function actOnExpense(expenseId, action) {
+    const approverId = currentUser ? currentUser.id : null;
+    if (!approverId) { showFeedback('err', 'Not signed in'); return; }
+    try {
+        if (action === 'approve') {
+            const notes = prompt('Approval notes (optional):', '') || '';
+            await apiCall(`/expenses/${expenseId}/approve`, {
+                method: 'POST',
+                body: JSON.stringify({ approverId, notes })
+            });
+            showFeedback('ok', `Expense #${expenseId} approved.`);
+        } else {
+            const reason = prompt('Reason for rejection (required):');
+            if (!reason) return;
+            await apiCall(`/expenses/${expenseId}/reject`, {
+                method: 'POST',
+                body: JSON.stringify({ approverId, reason })
+            });
+            showFeedback('ok', `Expense #${expenseId} rejected.`);
+        }
+        loadPendingExpenses();
+    } catch (err) {
+        showFeedback('err', err.message);
+    }
+}
+
+function showFeedback(kind, msg) {
+    const area = document.getElementById('approval-feedback');
+    area.innerHTML = `<div class="feedback ${kind}">${escapeHtml(msg)}</div>`;
+    setTimeout(() => { if (area.firstChild && area.firstChild.textContent === msg) area.innerHTML = ''; }, 5000);
+}
+
+// ==================== Final Budget Closure (UC #4) ====================
+async function loadClosableBudgets() {
+    try {
+        const budgets = await apiCall('/budgets');
+        const list = document.getElementById('closure-list');
+        const closable = budgets.filter(b => b.status === 'APPROVED' || b.status === 'CLOSED');
+        if (closable.length === 0) {
+            list.innerHTML = '<div class="empty-pending">No APPROVED budgets available to close.</div>';
+            return;
+        }
+        list.innerHTML = closable.map(b => `<div class="closure-card">
+            <div>
+                <h4>${escapeHtml(b.eventName)} <span class="badge ${b.status}">${b.status}</span></h4>
+                <p class="meta">Budget #${b.id} &middot; limit ${formatMoney(b.totalLimit)} &middot; allocated ${formatMoney(b.allocatedTotal)}</p>
+            </div>
+            <div class="actions">
+                <button id="preview-${b.id}" type="button">Preview Summary</button>
+                ${b.status === 'APPROVED'
+                    ? `<button id="close-${b.id}" class="btn-reject" type="button">Close Budget</button>`
+                    : ''}
+            </div>
+        </div>`).join('');
+        closable.forEach(b => {
+            document.getElementById(`preview-${b.id}`).addEventListener('click', () => previewClosure(b.id));
+            if (b.status === 'APPROVED') {
+                document.getElementById(`close-${b.id}`).addEventListener('click', () => closeBudget(b.id));
+            }
+        });
+    } catch (err) { /* non-fatal */ }
+}
+
+async function previewClosure(budgetId) {
+    try {
+        const summary = await apiCall(`/budgets/${budgetId}/closure-summary`);
+        renderClosureSummary(summary, false);
+    } catch (err) {
+        showFeedback('err', err.message);
+    }
+}
+
+async function closeBudget(budgetId) {
+    if (!confirm('Close this budget? This is irreversible — no more expenses can be submitted.')) return;
+    try {
+        const summary = await apiCall(`/budgets/${budgetId}/close`, { method: 'POST' });
+        renderClosureSummary(summary, true);
+        loadClosableBudgets();
+        loadPendingBudgets();
+    } catch (err) {
+        showFeedback('err', err.message);
+    }
+}
+
+function renderClosureSummary(s, justClosed) {
+    const area = document.getElementById('closure-summary');
+    const rows = s.categories.map(c => {
+        const v = Number(c.variance);
+        const cls = v >= 0 ? 'variance-pos' : 'variance-neg';
+        return `<tr>
+            <td>${escapeHtml(c.name)}</td>
+            <td class="right">${formatMoney(c.allocated)}</td>
+            <td class="right">${formatMoney(c.spent)}</td>
+            <td class="right ${cls}">${formatMoney(c.variance)}</td>
+        </tr>`;
+    }).join('');
+    area.innerHTML = `<div class="closure-summary-card">
+        <h3>${justClosed ? 'Budget Closed &mdash; ' : 'Closure Summary Preview &mdash; '}${escapeHtml(s.eventName)} <span class="badge ${s.status}">${s.status}</span></h3>
+        <p><a class="btn-download" href="/api/budgets/${s.budgetId}/closure-summary.csv" download>Download CSV</a></p>
+        <div class="summary-grid">
+            <div class="stat"><label>Total Budget</label><strong>${formatMoney(s.totalBudget)}</strong></div>
+            <div class="stat"><label>Total Allocated</label><strong>${formatMoney(s.totalAllocated)}</strong></div>
+            <div class="stat"><label>Total Spent</label><strong>${formatMoney(s.totalSpent)}</strong></div>
+            <div class="stat"><label>Remaining</label><strong>${formatMoney(s.remaining)}</strong></div>
+        </div>
+        <p class="muted">Approved claims: <strong>${s.approvedExpenseCount}</strong> &middot; Rejected claims: <strong>${s.rejectedExpenseCount}</strong></p>
+        <table>
+            <thead><tr><th>Category</th><th class="right">Allocated</th><th class="right">Spent</th><th class="right">Variance</th></tr></thead>
+            <tbody>${rows}</tbody>
+        </table>
+    </div>`;
+    area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ==================== Rules management (finance-authority side) ====================
+async function loadRulesManagement() {
+    try {
+        const budgets = await apiCall('/budgets');
+        const list = document.getElementById('rules-management-list');
+        const manageable = budgets.filter(b => b.status !== 'REJECTED');
+        if (manageable.length === 0) {
+            list.innerHTML = '<div class="empty-pending">No budgets with categories yet.</div>';
+            return;
+        }
+        list.innerHTML = manageable.map(b => {
+            const rows = (b.categories || []).map(c => `<tr>
+                <td>${escapeHtml(c.name)}</td>
+                <td class="right">${formatMoney(c.allocatedAmount)}</td>
+                <td><span class="rule-summary" id="mgmt-rule-summary-${c.id}"></span></td>
+                <td class="right"><button type="button" data-cat-id="${c.id}" data-cat-name="${escapeHtml(c.name)}" class="btn-edit-rule">Edit Rules</button></td>
+            </tr>`).join('') || '<tr class="empty-row"><td colspan="4">No categories</td></tr>';
+            return `<div class="rules-budget-block">
+                <h4>${escapeHtml(b.eventName)} <span class="muted">&middot; Budget #${b.id} &middot; ${b.status}</span></h4>
+                <table><thead><tr><th>Category</th><th class="right">Allocated</th><th>Current Rules</th><th class="right">&nbsp;</th></tr></thead><tbody>${rows}</tbody></table>
+            </div>`;
+        }).join('');
+        document.querySelectorAll('#rules-management-list .btn-edit-rule').forEach(btn => {
+            btn.addEventListener('click', () => openRuleModal(btn.dataset.catId, btn.dataset.catName));
+        });
+        manageable.forEach(b => (b.categories || []).forEach(c => refreshMgmtRuleSummary(c.id)));
+    } catch (err) { /* non-fatal */ }
+}
+
+async function refreshMgmtRuleSummary(categoryId) {
+    try {
+        const rule = await apiCall(`/categories/${categoryId}/rule`);
+        const el = document.getElementById(`mgmt-rule-summary-${categoryId}`);
+        if (!el) return;
+        const parts = [];
+        if (rule.maxExpenseAmount) parts.push(`max ${formatMoney(rule.maxExpenseAmount)}`);
+        if (rule.requiresL2ApprovalAbove) parts.push(`L2>${formatMoney(rule.requiresL2ApprovalAbove)}`);
+        if (rule.blocked) { el.textContent = 'BLOCKED'; el.classList.add('blocked'); return; }
+        el.classList.remove('blocked');
+        el.textContent = parts.length ? parts.join(' · ') : 'no rules';
+    } catch (err) { /* ignore */ }
+}
+
+// ==================== Category Rule modal (minor UC #3) ====================
+async function refreshRuleSummary(categoryId) {
+    try {
+        const rule = await apiCall(`/categories/${categoryId}/rule`);
+        const el = document.getElementById(`rule-summary-${categoryId}`);
+        if (!el) return;
+        const parts = [];
+        if (rule.maxExpenseAmount) parts.push(`max ${formatMoney(rule.maxExpenseAmount)}`);
+        if (rule.requiresL2ApprovalAbove) parts.push(`L2>${formatMoney(rule.requiresL2ApprovalAbove)}`);
+        if (rule.blocked) { el.textContent = 'BLOCKED'; el.classList.add('blocked'); return; }
+        el.classList.remove('blocked');
+        el.textContent = parts.length ? parts.join(' · ') : 'no rules';
+    } catch (err) { /* ignore */ }
+}
+
+function openRuleModal(categoryId, categoryName) {
+    document.getElementById('rule-category-id').value = categoryId;
+    document.getElementById('rule-modal-cat').textContent = '— ' + categoryName;
+    apiCall(`/categories/${categoryId}/rule`).then(rule => {
+        document.getElementById('rule-max').value = rule.maxExpenseAmount ?? '';
+        document.getElementById('rule-l2-above').value = rule.requiresL2ApprovalAbove ?? '';
+        document.getElementById('rule-blocked').checked = !!rule.blocked;
+    });
+    document.getElementById('rule-modal').classList.remove('hidden');
+}
+
+document.getElementById('rule-cancel').addEventListener('click', () => {
+    document.getElementById('rule-modal').classList.add('hidden');
+});
+
+document.getElementById('rule-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const id = document.getElementById('rule-category-id').value;
+    const max = document.getElementById('rule-max').value;
+    const l2 = document.getElementById('rule-l2-above').value;
+    const payload = {
+        maxExpenseAmount: max ? Number(max) : null,
+        requiresL2ApprovalAbove: l2 ? Number(l2) : null,
+        blocked: document.getElementById('rule-blocked').checked
+    };
+    try {
+        await apiCall(`/categories/${id}/rule`, {
+            method: 'PUT',
+            body: JSON.stringify(payload)
+        });
+        document.getElementById('rule-modal').classList.add('hidden');
+        refreshRuleSummary(id);
+        refreshMgmtRuleSummary(id);
+    } catch (err) {
+        alert('Failed to save rule: ' + err.message);
+    }
+});
+
+// ==================== Sidebar nav (approver shell) ====================
+const APPROVER_SECTIONS = ['section-budgets', 'section-expenses', 'section-closure', 'section-rules'];
+
+function showApproverSection(targetId) {
+    APPROVER_SECTIONS.forEach(id => {
+        document.getElementById(id)?.classList.toggle('hidden', id !== targetId);
+    });
+    document.querySelectorAll('.nav-link').forEach(l => {
+        l.classList.toggle('active', l.getAttribute('href') === '#' + targetId);
+    });
+}
+
+document.querySelectorAll('.nav-link').forEach(link => {
+    link.addEventListener('click', (e) => {
+        e.preventDefault();
+        showApproverSection(link.getAttribute('href').slice(1));
+    });
+});
+
+// ==================== Auth ====================
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    document.getElementById('login-error').textContent = '';
+    try {
+        const user = await apiCall('/auth/login', {
+            method: 'POST',
+            body: JSON.stringify({ email: fd.get('email'), password: fd.get('password') })
+        });
+        e.target.reset();
+        onAuthenticated(user);
+    } catch (err) {
+        document.getElementById('login-error').textContent = err.message;
+    }
+});
+
+document.getElementById('btn-logout').addEventListener('click', async () => {
+    try { await apiCall('/auth/logout', { method: 'POST' }); } catch (e) { /* ignore */ }
+    currentUser = null;
+    currentBudgetId = null;
+    document.getElementById('login-view').classList.remove('hidden');
+    document.getElementById('organizer-view').classList.add('hidden');
+    document.getElementById('approver-view').classList.add('hidden');
+    document.getElementById('user-bar').classList.add('hidden');
+    document.getElementById('role-switch').classList.add('hidden');
+});
+
+function onAuthenticated(user) {
+    currentUser = user;
+    document.getElementById('login-view').classList.add('hidden');
+    document.getElementById('user-bar').classList.remove('hidden');
+    document.getElementById('user-name').textContent = user.name;
+    document.getElementById('user-role-tag').textContent = user.role;
+    // Each role sees only its own workspace — separation of duties.
+    document.getElementById('role-switch').classList.add('hidden');
+    if (user.role === 'ORGANIZER') {
+        document.getElementById('organizer-view').classList.remove('hidden');
+        document.getElementById('approver-view').classList.add('hidden');
+        loadOrganizers();
+        restoreOrganizerWorkspace();
+    } else {
+        document.getElementById('organizer-view').classList.add('hidden');
+        document.getElementById('approver-view').classList.remove('hidden');
+        loadPendingBudgets();
+        loadPendingExpenses();
+        loadRulesManagement();
+        loadClosableBudgets();
+        // Sidebar default: show only Pending Budgets, hide the rest.
+        showApproverSection('section-budgets');
+    }
+}
+
+// On reload, an organizer may already have an active (non-CLOSED, non-REJECTED)
+// budget — restore it instead of dumping them on the empty create-event form.
+async function restoreOrganizerWorkspace() {
+    if (!currentUser || currentUser.role !== 'ORGANIZER') return;
+    try {
+        const budgets = await apiCall('/budgets');
+        const mine = budgets
+            .filter(b => b.organizerId === currentUser.id
+                && b.status !== 'CLOSED'
+                && b.status !== 'REJECTED')
+            .sort((a, b) => b.id - a.id);
+        if (mine.length === 0) return;
+        const latest = mine[0];
+        currentBudgetId = latest.id;
+        renderBudget(latest);
+        document.getElementById('step-create').classList.add('hidden');
+        document.getElementById('workspace').classList.remove('hidden');
+    } catch (err) { /* non-fatal — leave create-event form visible */ }
+}
+
+async function bootstrapAuth() {
+    try {
+        const user = await apiCall('/auth/me');
+        onAuthenticated(user);
+    } catch (err) {
+        // Not signed in — login view stays visible.
+    }
+}
+
 // ==================== Init ====================
-loadOrganizers();
+bootstrapAuth();
