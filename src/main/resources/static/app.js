@@ -111,7 +111,90 @@ function renderBudget(budget) {
     // Submit is allowed from DRAFT or READY.
     const canSubmit = isDraft || budget.status === 'READY';
     document.getElementById('btn-submit').disabled = !canSubmit;
+
+    // Expense submission section — only active once the budget is APPROVED.
+    const expenseSection = document.getElementById('expense-section');
+    if (budget.status === 'APPROVED') {
+        expenseSection.classList.remove('hidden');
+        populateExpenseCategorySelect(budget.categories);
+        loadExpenses();
+        loadRoutingPolicy();
+    } else {
+        expenseSection.classList.add('hidden');
+    }
 }
+
+// ==================== Expense submission (UC #2) ====================
+function populateExpenseCategorySelect(categories) {
+    const select = document.getElementById('expense-category-select');
+    if (!categories || categories.length === 0) {
+        select.innerHTML = '<option value="">(no categories)</option>';
+        return;
+    }
+    select.innerHTML = categories
+        .map(c => `<option value="${c.id}">${escapeHtml(c.name)} &mdash; allocated ${formatMoney(c.allocatedAmount)}</option>`)
+        .join('');
+}
+
+async function loadRoutingPolicy() {
+    try {
+        const { activeStrategy } = await apiCall('/expenses/routing-policy');
+        document.getElementById('routing-policy-tag').textContent = `Routing policy: ${activeStrategy}`;
+    } catch (err) {
+        /* non-fatal */
+    }
+}
+
+async function loadExpenses() {
+    if (!currentBudgetId) return;
+    try {
+        const expenses = await apiCall(`/expenses?budgetId=${currentBudgetId}`);
+        renderExpenses(expenses);
+    } catch (err) {
+        alert('Failed to load expenses: ' + err.message);
+    }
+}
+
+function renderExpenses(expenses) {
+    const tbody = document.querySelector('#expenses-table tbody');
+    if (!expenses || expenses.length === 0) {
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="5">No expenses submitted yet</td></tr>';
+        return;
+    }
+    tbody.innerHTML = expenses
+        .map(e => `<tr>
+            <td>${escapeHtml(e.description)}</td>
+            <td>${escapeHtml(e.categoryName)}</td>
+            <td class="right">${formatMoney(e.amount)}</td>
+            <td><span class="level-badge ${e.requiredApprovalLevel}">${e.requiredApprovalLevel.replace(/_/g, ' ')}</span></td>
+            <td><span class="expense-status ${e.status}">${e.status.replace(/_/g, ' ')}</span></td>
+        </tr>`)
+        .join('');
+}
+
+document.getElementById('submit-expense-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const organizerId = Number(document.getElementById('organizer-select').value);
+    const payload = {
+        categoryId: Number(fd.get('categoryId')),
+        submittedById: organizerId,
+        description: fd.get('description'),
+        amount: Number(fd.get('amount')),
+        expenseDate: fd.get('expenseDate'),
+        supportingDocUrl: fd.get('supportingDocUrl') || null
+    };
+    try {
+        await apiCall('/expenses', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        e.target.reset();
+        loadExpenses();
+    } catch (err) {
+        alert('Failed to submit expense: ' + err.message);
+    }
+});
 
 // ==================== Add category ====================
 document.getElementById('add-category-form').addEventListener('submit', async (e) => {

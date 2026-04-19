@@ -106,7 +106,13 @@ public class BudgetService {
             throw new InvalidBudgetException("Budget cannot be submitted from status " + budget.getStatus());
         }
         budget.setStatus(BudgetStatus.SUBMITTED);
-        return approvalStrategy.evaluate(budget);
+        ApprovalDecision decision = approvalStrategy.evaluate(budget);
+        switch (decision.getOutcome()) {
+            case AUTO_APPROVED -> budget.setStatus(BudgetStatus.APPROVED);
+            case REJECTED -> budget.setStatus(BudgetStatus.REJECTED);
+            case REQUIRES_MANUAL_REVIEW -> { /* remains SUBMITTED pending human review */ }
+        }
+        return decision;
     }
 
     public BudgetResponse get(Long budgetId) {

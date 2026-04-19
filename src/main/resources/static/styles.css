@@ -289,6 +289,48 @@ tbody tr:last-child td { border-bottom: none; }
     display: block;
 }
 
+/* ---------- Expense section ---------- */
+.form-row.single { grid-template-columns: 1fr; }
+.expense-hint { margin-bottom: 1rem; }
+.expense-list-title {
+    margin: 1.75rem 0 0.75rem;
+    font-size: 0.9375rem;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+.policy-tag {
+    display: inline-block;
+    margin-left: 0.75rem;
+    font-size: 0.6875rem;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+}
+.level-badge {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    color: white;
+    background: var(--muted);
+}
+.level-badge.LEVEL_1 { background: var(--ready); }
+.level-badge.LEVEL_1_AND_2 { background: var(--warning); }
+
+.expense-status {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.6875rem;
+    font-weight: 700;
+    color: white;
+}
+.expense-status.PENDING_APPROVAL { background: var(--submitted); }
+.expense-status.APPROVED { background: var(--approved); }
+.expense-status.REJECTED { background: var(--rejected); }
+
 /* ---------- Footer ---------- */
 .footer {
     text-align: center;

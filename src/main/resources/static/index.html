@@ -106,6 +106,56 @@
                 <div id="decision-area"></div>
             </div>
 
+            <!-- STEP 5: Submit Expense Claim (UC #2) -->
+            <div id="expense-section" class="subsection hidden">
+                <h3><span class="step-num">5</span> Submit Expense Claim</h3>
+                <p class="muted expense-hint">Budget is APPROVED — organizers can now submit expense claims against its categories.</p>
+                <form id="submit-expense-form">
+                    <div class="form-row">
+                        <label>
+                            Category
+                            <select name="categoryId" id="expense-category-select" required></select>
+                        </label>
+                        <label>
+                            Amount (&#8377;)
+                            <input type="number" name="amount" step="0.01" min="0.01" placeholder="e.g. 1500" required>
+                        </label>
+                    </div>
+                    <div class="form-row">
+                        <label>
+                            Expense Date
+                            <input type="date" name="expenseDate" required>
+                        </label>
+                        <label>
+                            Supporting Doc URL
+                            <input type="url" name="supportingDocUrl" placeholder="Optional">
+                        </label>
+                    </div>
+                    <div class="form-row single">
+                        <label>
+                            Description
+                            <input type="text" name="description" placeholder="e.g. Catering for day 1" required>
+                        </label>
+                    </div>
+                    <button type="submit" class="primary">Submit Expense</button>
+                    <span id="routing-policy-tag" class="policy-tag"></span>
+                </form>
+
+                <h4 class="expense-list-title">Submitted Expenses</h4>
+                <table id="expenses-table">
+                    <thead>
+                        <tr>
+                            <th>Description</th>
+                            <th>Category</th>
+                            <th class="right">Amount</th>
+                            <th>Approval Chain</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
             <button id="btn-reset" class="link">&larr; Start over with a new event</button>
         </section>
 
