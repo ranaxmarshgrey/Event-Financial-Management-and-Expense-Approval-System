@@ -2,6 +2,7 @@ package com.ooad.efms.controller;
 
 import com.ooad.efms.dto.AddCategoryRequest;
 import com.ooad.efms.dto.AlertDTO;
+import com.ooad.efms.dto.BudgetClosureResponse;
 import com.ooad.efms.dto.BudgetResponse;
 import com.ooad.efms.dto.CreateEventRequest;
 import com.ooad.efms.service.BudgetService;
@@ -46,5 +47,35 @@ public class BudgetController {
     @GetMapping("/{id}")
     public ResponseEntity<BudgetResponse> get(@PathVariable Long id) {
         return ResponseEntity.ok(budgetService.get(id));
+    }
+
+    @GetMapping
+    public ResponseEntity<List<BudgetResponse>> listAll() {
+        return ResponseEntity.ok(budgetService.listAll());
+    }
+
+    @GetMapping("/pending-approval")
+    public ResponseEntity<List<BudgetResponse>> pendingApproval() {
+        return ResponseEntity.ok(budgetService.listPendingApproval());
+    }
+
+    @PostMapping("/{id}/manual-approve")
+    public ResponseEntity<BudgetResponse> manualApprove(@PathVariable Long id) {
+        return ResponseEntity.ok(budgetService.manualApprove(id));
+    }
+
+    @PostMapping("/{id}/manual-reject")
+    public ResponseEntity<BudgetResponse> manualReject(@PathVariable Long id) {
+        return ResponseEntity.ok(budgetService.manualReject(id));
+    }
+
+    @PostMapping("/{id}/close")
+    public ResponseEntity<BudgetClosureResponse> close(@PathVariable Long id) {
+        return ResponseEntity.ok(budgetService.closeBudget(id));
+    }
+
+    @GetMapping("/{id}/closure-summary")
+    public ResponseEntity<BudgetClosureResponse> closureSummary(@PathVariable Long id) {
+        return ResponseEntity.ok(budgetService.getClosureSummary(id));
     }
 }

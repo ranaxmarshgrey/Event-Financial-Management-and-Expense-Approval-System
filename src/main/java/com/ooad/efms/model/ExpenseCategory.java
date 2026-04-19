@@ -27,6 +27,10 @@ public class ExpenseCategory {
     @JsonIgnore
     private Budget budget;
 
+    @OneToOne(mappedBy = "category", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @JsonIgnore
+    private CategoryRule rule;
+
     public ExpenseCategory() {}
 
     public ExpenseCategory(String name, BigDecimal allocatedAmount) {
@@ -44,4 +48,6 @@ public class ExpenseCategory {
     public void setSpentAmount(BigDecimal spentAmount) { this.spentAmount = spentAmount; }
     public Budget getBudget() { return budget; }
     public void setBudget(Budget budget) { this.budget = budget; }
+    public CategoryRule getRule() { return rule; }
+    public void setRule(CategoryRule rule) { this.rule = rule; }
 }
